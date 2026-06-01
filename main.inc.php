@@ -1,7 +1,7 @@
 <?php
 /*
 Plugin Name: Pedra AI
-Version: 1.0.0
+Version: 1.1.0
 Description: Real estate photo processing via Pedra AI API (virtual staging, renovation, enhancement, etc.)
 Plugin URI: https://pedra.ai
 Author: Piwigo User
