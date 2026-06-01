@@ -40,6 +40,10 @@ $lang['Background blur']                                 = 'Background blur';
 $lang['Prompt (edit_via_prompt only)']  = 'Prompt (edit_via_prompt only)';
 $lang['Describe modifications...']      = 'Describe modifications...';
 
+// Credits widget
+$lang['Free plan — limited credits']   = 'Free plan — limited credits';
+$lang['Credits will be fetched automatically when you open the ⚡ widget.'] = 'Credits will be fetched automatically when you open the ⚡ widget.';
+
 // Credits check
 $lang['Refresh from API']         = 'Refresh from API';
 $lang['Checking…']                = 'Checking…';

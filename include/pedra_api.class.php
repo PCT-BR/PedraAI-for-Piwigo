@@ -117,8 +117,8 @@ class PedraApiClient
       CURLOPT_POSTFIELDS     => json_encode(['apiKey' => $this->api_key]),
       CURLOPT_HTTPHEADER     => ['Content-Type: application/json', 'Accept: application/json'],
       CURLOPT_RETURNTRANSFER => true,
-      CURLOPT_TIMEOUT        => 15,
-      CURLOPT_CONNECTTIMEOUT => 10,
+      CURLOPT_TIMEOUT        => 5,   // short — UI-triggered, don't block the widget
+      CURLOPT_CONNECTTIMEOUT => 5,
     ]);
 
     $raw  = curl_exec($ch);

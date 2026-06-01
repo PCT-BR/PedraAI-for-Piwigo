@@ -54,4 +54,33 @@ while ($row = pwg_db_fetch_assoc($result)) {
 $credits_raw = $conf['pedra_ai_credits'] ?? '';
 $remaining   = ($credits_raw !== '') ? (int) $credits_raw : null;
 
-echo json_encode(['stat' => 'ok', 'jobs' => $jobs, 'remaining_credits' => $remaining]);
+// Live credit fetch — only when caller explicitly requests it (?credits=1)
+// so normal widget polls stay fast. On success, auto-sync the stored counter.
+$live_plan    = null;
+$live_credits = null;
+
+if (!empty($_GET['credits']) && !empty($conf['pedra_ai_api_key'])) {
+  include_once(PHPWG_PLUGINS_PATH . 'pedra_ai/include/pedra_api.class.php');
+  $client = new PedraApiClient($conf['pedra_ai_api_key']);
+  $result = $client->getCredits();
+
+  if ($result['success']) {
+    $live_plan    = $result['plan'];
+    $live_credits = $result['creditsRemaining'];
+
+    // Auto-sync the stored counter so the batch manager shows up-to-date credits
+    if ($live_credits !== $remaining) {
+      conf_update_param('pedra_ai_credits', (string) $live_credits, true);
+      $conf['pedra_ai_credits'] = (string) $live_credits;
+      $remaining = $live_credits;
+    }
+  }
+}
+
+echo json_encode([
+  'stat'             => 'ok',
+  'jobs'             => $jobs,
+  'remaining_credits'=> $remaining,
+  'live_plan'        => $live_plan,
+  'live_credits'     => $live_credits,
+]);
