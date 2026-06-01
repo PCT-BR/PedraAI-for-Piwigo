@@ -13,7 +13,7 @@
         <label>
           {'API Key'|@translate}
           <input
-            type="text"
+            type="password"
             name="pedra_ai_api_key"
             value="{$pedra_ai_api_key|escape:'html'}"
             size="60"
@@ -25,6 +25,25 @@
           {'Get your API key from'|@translate}
           <a href="https://app.pedra.ai" target="_blank" rel="noopener">app.pedra.ai</a>
           {'→ Settings → API'|@translate}
+        </span>
+      </li>
+
+      <li>
+        <label>
+          {'Remaining credits'|@translate}
+          <input
+            type="number"
+            name="pedra_ai_credits"
+            value="{if $pedra_ai_credits !== null}{$pedra_ai_credits|intval}{/if}"
+            min="0"
+            size="10"
+            placeholder="—"
+            style="width:100px"
+          >
+        </label>
+        <span class="hint">
+          {'Update manually after each credit purchase. The plugin decrements automatically after each successful job.'|@translate}
+          &nbsp;<a href="https://app.pedra.ai" target="_blank" rel="noopener">{'Check balance on app.pedra.ai →'|@translate}</a>
         </span>
       </li>
     </ul>

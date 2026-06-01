@@ -6,6 +6,7 @@ Description: Real estate photo processing via Pedra AI API (virtual staging, ren
 Plugin URI: https://pedra.ai
 Author: Piwigo User
 Author URI:
+Has Settings: true
 */
 
 defined('PHPWG_ROOT_PATH') or die('Hacking attempt!');
@@ -27,6 +28,20 @@ define('PEDRA_AI_OPERATIONS', serialize([
   'enhance_and_correct_perspective',
   'sky_blue',
   'blur',
+]));
+
+// Credit cost per operation. Furnish/renovation cost 2 credits on Medium, 1 on High.
+// All other operations cost 1 credit. Used for the manual credits counter.
+define('PEDRA_AI_CREDIT_COSTS', serialize([
+  'furnish'                         => ['medium' => 2, 'high' => 1, 'default' => 2],
+  'renovation'                      => ['medium' => 2, 'high' => 1, 'default' => 2],
+  'empty_room'                      => ['default' => 1],
+  'edit_via_prompt'                  => ['default' => 1],
+  'remove_object'                   => ['default' => 1],
+  'enhance'                         => ['default' => 1],
+  'enhance_and_correct_perspective' => ['default' => 1],
+  'sky_blue'                        => ['default' => 1],
+  'blur'                            => ['default' => 1],
 ]));
 
 add_event_handler('init',                         'pedra_ai_init');

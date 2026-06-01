@@ -4,16 +4,15 @@ defined('PHPWG_ROOT_PATH') or die('Hacking attempt!');
 
 /**
  * Convert a Piwigo image to a base64 data URI for the Pedra AI API.
- * Uses the physical file path from the images table `path` column.
+ * Base64 is used instead of a public URL so that private/protected albums
+ * work correctly — Pedra fetches nothing; the image data is in the request body.
  *
  * @param array $image_info Row from IMAGES_TABLE (result of get_image_infos())
- * @return string Full data URI: "data:image/jpeg;base64,..."
+ * @return string Data URI: "data:image/jpeg;base64,..."
  * @throws RuntimeException if the file cannot be read
  */
-function pedra_ai_image_to_base64(array $image_info): string
+function pedra_ai_get_image_url(array $image_info): string
 {
-  // The path stored in DB has the PHPWG_ROOT_PATH prefix stripped (see functions_upload.inc.php:380)
-  // Reconstructing: PHPWG_ROOT_PATH . $image_info['path'] gives e.g. './upload/2025/05/30/file.jpg'
   $relative_path = PHPWG_ROOT_PATH . $image_info['path'];
   $abs_path      = realpath($relative_path);
 
@@ -24,22 +23,8 @@ function pedra_ai_image_to_base64(array $image_info): string
     throw new RuntimeException('Image file not readable: ' . $abs_path);
   }
 
-  $mime = mime_content_type($abs_path);
-  if (empty($mime)) {
-    // Fallback: infer from extension
-    $ext  = strtolower(get_extension($image_info['file'] ?? $image_info['path']));
-    $mime = match($ext) {
-      'jpg', 'jpeg' => 'image/jpeg',
-      'png'         => 'image/png',
-      'webp'        => 'image/webp',
-      'gif'         => 'image/gif',
-      default       => 'image/jpeg',
-    };
-  }
-
-  $data = base64_encode(file_get_contents($abs_path));
-
-  return 'data:' . $mime . ';base64,' . $data;
+  $mime = mime_content_type($abs_path) ?: 'image/jpeg';
+  return 'data:' . $mime . ';base64,' . base64_encode(file_get_contents($abs_path));
 }
 
 /**
@@ -151,11 +136,22 @@ function pedra_ai_save_as_new_image(int $source_image_id, string $tmp_path, stri
     throw new RuntimeException('Source image #' . $source_image_id . ' not found');
   }
 
-  // Build display filename: originalname_pedra.jpg
+  // Build display filename — use the result's actual MIME type for the extension,
+  // since Pedra may return WebP even when the source was JPEG.
   $original_file = $source_info['file'];
-  $ext           = get_extension($original_file);
+  $src_ext       = get_extension($original_file);
   $base          = get_filename_wo_extension($original_file);
-  $new_filename  = $base . $suffix . '.' . $ext;
+
+  $result_mime = mime_content_type($tmp_path) ?: 'image/jpeg';
+  $mime_to_ext = [
+    'image/jpeg' => 'jpg',
+    'image/png'  => 'png',
+    'image/webp' => 'webp',
+    'image/gif'  => 'gif',
+    'image/avif' => 'avif',
+  ];
+  $result_ext   = $mime_to_ext[$result_mime] ?? $src_ext;
+  $new_filename = $base . $suffix . '.' . $result_ext;
 
   // add_uploaded_file handles: path computation, DB insert, derivative priming, metadata sync
   $new_image_id = add_uploaded_file(
@@ -188,24 +184,55 @@ SELECT category_id
 
 /**
  * Log a Pedra AI job to the tracking table.
+ * When status is 'done', auto-decrements the pedra_ai_credits counter if it is set.
  */
-function pedra_ai_log_job(int $image_id, string $operation, string $status, ?string $url, ?string $error): void
+function pedra_ai_log_job(int $image_id, string $operation, string $status, ?string $url, ?string $error, ?int $new_image_id = null, string $creativity = 'Medium'): void
 {
-  $url_sql   = $url   ? '"' . pwg_db_real_escape_string($url) . '"'   : 'NULL';
-  $error_sql = $error ? '"' . pwg_db_real_escape_string(substr($error, 0, 500)) . '"' : 'NULL';
+  $url_sql          = $url          ? '"' . pwg_db_real_escape_string($url) . '"'                    : 'NULL';
+  $error_sql        = $error        ? '"' . pwg_db_real_escape_string(substr($error, 0, 500)) . '"'  : 'NULL';
+  $new_image_id_sql = $new_image_id ? (int) $new_image_id                                            : 'NULL';
 
   $query = '
 INSERT INTO ' . PEDRA_AI_JOBS_TABLE . '
-  (image_id, operation, status, result_url, error_msg, created_at)
+  (image_id, operation, status, result_url, new_image_id, error_msg, created_at)
   VALUES(
     ' . $image_id . ',
     "' . pwg_db_real_escape_string($operation) . '",
     "' . $status . '",
     ' . $url_sql . ',
+    ' . $new_image_id_sql . ',
     ' . $error_sql . ',
     NOW()
   )
 ;';
 
   pwg_query($query);
+
+  // Auto-decrement credit counter on successful jobs (only if tracking is enabled)
+  if ($status === 'done') {
+    pedra_ai_decrement_credits($operation, $creativity);
+  }
+}
+
+/**
+ * Decrement the pedra_ai_credits counter by the cost of the given operation.
+ * Does nothing if the counter is not configured (empty string).
+ */
+function pedra_ai_decrement_credits(string $operation, string $creativity = 'Medium'): void
+{
+  global $conf;
+
+  $current = $conf['pedra_ai_credits'] ?? '';
+  if ($current === '' || $current === null) {
+    return;
+  }
+
+  $costs    = unserialize(PEDRA_AI_CREDIT_COSTS);
+  $op_costs = $costs[$operation] ?? ['default' => 1];
+  $key      = strtolower($creativity);
+  $cost     = $op_costs[$key] ?? $op_costs['default'] ?? 1;
+
+  $new_val = max(0, (int) $current - $cost);
+  conf_update_param('pedra_ai_credits', (string) $new_val, true);
+  $conf['pedra_ai_credits'] = (string) $new_val;
 }

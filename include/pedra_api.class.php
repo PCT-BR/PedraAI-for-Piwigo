@@ -24,7 +24,7 @@ class PedraApiClient
    * @param array  $extra      Operation-specific parameters (e.g. ['prompt' => '...'])
    * @return array{success: bool, urls: string[], error: string}
    */
-  public function process(string $operation, string $image_b64, array $extra = []): array
+  public function process(string $operation, string $image_url, array $extra = []): array
   {
     if (!function_exists('curl_init')) {
       return ['success' => false, 'urls' => [], 'error' => 'cURL extension not available'];
@@ -33,8 +33,8 @@ class PedraApiClient
     $endpoint = $this->base_url . '/' . $operation;
 
     $body = array_merge([
-      'api_key'     => $this->api_key,
-      'image_input' => $image_b64,
+      'apiKey'   => $this->api_key,
+      'imageUrl' => $image_url,
     ], $extra);
 
     $json_body = json_encode($body);
@@ -78,10 +78,23 @@ class PedraApiClient
     }
 
     if (empty($data['output'])) {
-      return ['success' => false, 'urls' => [], 'error' => 'Empty output in response'];
+      return ['success' => false, 'urls' => [], 'error' => 'Empty output in response. Raw: ' . substr($raw, 0, 300)];
     }
 
-    $urls = is_array($data['output']) ? $data['output'] : [$data['output']];
+    $raw_urls = is_array($data['output']) ? $data['output'] : [$data['output']];
+
+    // Pedra may return URL strings or objects — normalize to strings
+    $urls = array_values(array_filter(array_map(function($item) {
+      if (is_string($item)) return $item;
+      if (is_array($item)) {
+        return $item['url'] ?? $item['imageUrl'] ?? $item['outputUrl'] ?? (is_string(reset($item)) ? reset($item) : null);
+      }
+      return null;
+    }, $raw_urls)));
+
+    if (empty($urls)) {
+      return ['success' => false, 'urls' => [], 'error' => 'Could not extract URL from output. Raw: ' . substr($raw, 0, 300)];
+    }
 
     return ['success' => true, 'urls' => $urls, 'error' => ''];
   }

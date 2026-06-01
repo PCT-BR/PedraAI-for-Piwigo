@@ -28,16 +28,22 @@ if (!empty($_POST) && isset($_POST['pedra_submit'])) {
     $suffix = '_pedra';
   }
 
+  // Credits: empty string means "not tracked" (null); otherwise must be non-negative integer
+  $credits_raw = trim($_POST['pedra_ai_credits'] ?? '');
+  $credits     = ($credits_raw !== '') ? max(0, (int) $credits_raw) : null;
+
   conf_update_param('pedra_ai_api_key',    $api_key,    true);
   conf_update_param('pedra_ai_default_op', $default_op, true);
   conf_update_param('pedra_ai_save_mode',  $save_mode,  true);
   conf_update_param('pedra_ai_suffix',     $suffix,     true);
+  conf_update_param('pedra_ai_credits',    $credits !== null ? (string) $credits : '', true);
 
   // Refresh $conf so template sees new values immediately
   $conf['pedra_ai_api_key']    = $api_key;
   $conf['pedra_ai_default_op'] = $default_op;
   $conf['pedra_ai_save_mode']  = $save_mode;
   $conf['pedra_ai_suffix']     = $suffix;
+  $conf['pedra_ai_credits']    = $credits !== null ? (string) $credits : '';
 
   $page['infos'][] = l10n('Configuration saved');
 }
@@ -52,11 +58,13 @@ $template->set_filenames([
   'pedra_ai_config' => PHPWG_PLUGINS_PATH . 'pedra_ai/admin/tpl/pedra_ai_config.tpl',
 ]);
 
+$credits_conf = $conf['pedra_ai_credits'] ?? '';
 $template->assign([
   'pedra_ai_api_key'    => $conf['pedra_ai_api_key']    ?? '',
   'pedra_ai_default_op' => $conf['pedra_ai_default_op'] ?? 'enhance',
   'pedra_ai_save_mode'  => $conf['pedra_ai_save_mode']  ?? 'new',
   'pedra_ai_suffix'     => $conf['pedra_ai_suffix']     ?? '_pedra',
+  'pedra_ai_credits'    => ($credits_conf !== '') ? (int) $credits_conf : null,
   'pedra_ai_operations' => $operations,
   'F_ACTION'            => $action,
   'PWG_TOKEN'           => get_pwg_token(),
