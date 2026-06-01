@@ -40,6 +40,12 @@ $lang['Background blur']                                 = 'Background blur';
 $lang['Prompt (edit_via_prompt only)']  = 'Prompt (edit_via_prompt only)';
 $lang['Describe modifications...']      = 'Describe modifications...';
 
+// Credits check
+$lang['Refresh from API']         = 'Refresh from API';
+$lang['Checking…']                = 'Checking…';
+$lang['credits remaining']        = 'credits remaining';
+$lang['Could not fetch credits']  = 'Could not fetch credits';
+
 // Process messages
 $lang['Pedra AI: API key not configured. Please configure the plugin first.'] = 'Pedra AI: API key not configured. Please configure the plugin first.';
 $lang['Pedra AI: a prompt is required for the edit_via_prompt operation.']    = 'Pedra AI: a prompt is required for the edit_via_prompt operation.';

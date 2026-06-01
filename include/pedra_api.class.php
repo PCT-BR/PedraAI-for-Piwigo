@@ -98,4 +98,49 @@ class PedraApiClient
 
     return ['success' => true, 'urls' => $urls, 'error' => ''];
   }
+
+  /**
+   * Check the remaining credit balance for the account tied to this API key.
+   * Read-only — never deducts credits.
+   *
+   * @return array{success: bool, plan: string, creditsRemaining: int, error: string}
+   */
+  public function getCredits(): array
+  {
+    if (!function_exists('curl_init')) {
+      return ['success' => false, 'plan' => '', 'creditsRemaining' => 0, 'error' => 'cURL extension not available'];
+    }
+
+    $ch = curl_init($this->base_url . '/credits');
+    curl_setopt_array($ch, [
+      CURLOPT_POST           => true,
+      CURLOPT_POSTFIELDS     => json_encode(['apiKey' => $this->api_key]),
+      CURLOPT_HTTPHEADER     => ['Content-Type: application/json', 'Accept: application/json'],
+      CURLOPT_RETURNTRANSFER => true,
+      CURLOPT_TIMEOUT        => 15,
+      CURLOPT_CONNECTTIMEOUT => 10,
+    ]);
+
+    $raw  = curl_exec($ch);
+    $code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    $err  = curl_error($ch);
+    curl_close($ch);
+
+    if ($raw === false || !empty($err)) {
+      return ['success' => false, 'plan' => '', 'creditsRemaining' => 0, 'error' => 'cURL error: ' . $err];
+    }
+
+    $data = json_decode($raw, true);
+    if (json_last_error() !== JSON_ERROR_NONE || $code !== 200) {
+      $msg = (is_array($data) ? ($data['message'] ?? $data['error'] ?? null) : null) ?? ('HTTP ' . $code);
+      return ['success' => false, 'plan' => '', 'creditsRemaining' => 0, 'error' => $msg];
+    }
+
+    return [
+      'success'          => true,
+      'plan'             => (string) ($data['plan'] ?? 'unknown'),
+      'creditsRemaining' => (int) ($data['creditsRemaining'] ?? 0),
+      'error'            => '',
+    ];
+  }
 }

@@ -33,6 +33,7 @@
           {'Remaining credits'|@translate}
           <input
             type="number"
+            id="pedra_ai_credits_input"
             name="pedra_ai_credits"
             value="{if $pedra_ai_credits !== null}{$pedra_ai_credits|intval}{/if}"
             min="0"
@@ -41,9 +42,12 @@
             style="width:100px"
           >
         </label>
-        <span class="hint">
+        <button type="button" id="pedra_check_credits_btn" style="margin-left:8px">
+          {'Refresh from API'|@translate} ↻
+        </button>
+        <span id="pedra_credits_result" style="margin-left:10px;font-weight:bold"></span>
+        <span class="hint" style="display:block;margin-top:4px">
           {'Update manually after each credit purchase. The plugin decrements automatically after each successful job.'|@translate}
-          &nbsp;<a href="https://app.pedra.ai" target="_blank" rel="noopener">{'Check balance on app.pedra.ai →'|@translate}</a>
         </span>
       </li>
     </ul>
@@ -165,3 +169,34 @@
     <input type="submit" name="pedra_submit" value="{'Save Settings'|@translate}" class="submit">
   </p>
 </form>
+
+<script>
+(function($) {
+  $('#pedra_check_credits_btn').on('click', function() {
+    var $btn    = $(this);
+    var $result = $('#pedra_credits_result');
+    var $input  = $('#pedra_ai_credits_input');
+
+    $btn.prop('disabled', true).text({'Checking…'|@translate});
+    $result.css('color', '').text('');
+
+    $.getJSON({$PEDRA_AI_CREDITS_AJAX_URL|escape:'javascript'|json_encode})
+      .done(function(data) {
+        if (data.success) {
+          $input.val(data.creditsRemaining);
+          $result.css('color', '#3a7d44').text(
+            data.creditsRemaining + ' {'credits remaining'|@translate} (' + data.plan + ')'
+          );
+        } else {
+          $result.css('color', '#c0392b').text('✗ ' + (data.error || '{'Could not fetch credits'|@translate}'));
+        }
+      })
+      .fail(function() {
+        $result.css('color', '#c0392b').text('✗ {'Could not fetch credits'|@translate}');
+      })
+      .always(function() {
+        $btn.prop('disabled', false).text('{'Refresh from API'|@translate} ↻');
+      });
+  });
+})(jQuery);
+</script>
