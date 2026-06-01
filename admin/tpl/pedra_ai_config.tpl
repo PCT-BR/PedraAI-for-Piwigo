@@ -50,6 +50,43 @@
   </fieldset>
 
   <fieldset>
+    <legend>{'Processing Server (video support)'|@translate}</legend>
+    <ul>
+      <li>
+        <label>
+          {'Server URL'|@translate}
+          <input
+            type="url"
+            name="pedra_ai_server_url"
+            value="{$pedra_ai_server_url|escape:'html'}"
+            size="60"
+            placeholder="https://your-server.railway.app"
+          >
+        </label>
+        <span class="hint">
+          {'URL of the async processing server. Leave blank to disable video support.'|@translate}
+        </span>
+      </li>
+      <li>
+        <label>
+          {'Server token'|@translate}
+          <input
+            type="password"
+            name="pedra_ai_server_token"
+            value="{$pedra_ai_server_token|escape:'html'}"
+            size="60"
+            placeholder="SERVER_TOKEN env var on the processing server"
+            style="font-family:monospace"
+          >
+        </label>
+        <span class="hint">
+          {'Shared secret — must match SERVER_TOKEN on the processing server.'|@translate}
+        </span>
+      </li>
+    </ul>
+  </fieldset>
+
+  <fieldset>
     <legend>{'Default Processing Options'|@translate}</legend>
 
     <ul>

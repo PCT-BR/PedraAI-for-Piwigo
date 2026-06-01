@@ -1,7 +1,7 @@
 <?php
 /*
 Plugin Name: Pedra AI
-Version: 1.1.0
+Version: 1.2.0
 Description: Real estate photo processing via Pedra AI API (virtual staging, renovation, enhancement, etc.)
 Plugin URI: https://pedra.ai
 Author: Piwigo User
@@ -45,6 +45,7 @@ define('PEDRA_AI_CREDIT_COSTS', serialize([
 ]));
 
 add_event_handler('init',                         'pedra_ai_init');
+add_event_handler('loc_begin_index',              'pedra_ai_assign_template_vars');
 add_event_handler('loc_begin_element_set_global', 'pedra_ai_batch_manager_register');
 add_event_handler('element_set_global_action',    'pedra_ai_batch_manager_action');
 add_event_handler('loc_begin_admin',              'pedra_ai_admin_menu');
@@ -54,6 +55,13 @@ add_event_handler('loc_begin_admin',              'pedra_ai_admin_menu');
 function pedra_ai_init()
 {
   load_language('plugin.lang', PHPWG_PLUGINS_PATH . 'pedra_ai/language/');
+}
+
+function pedra_ai_assign_template_vars()
+{
+  global $template, $conf;
+  $server_ready = !empty($conf['pedra_ai_server_url']) && !empty($conf['pedra_ai_server_token']);
+  $template->assign('PEDRA_SERVER_CONFIGURED', $server_ready);
 }
 
 function pedra_ai_admin_menu()
@@ -91,6 +99,10 @@ function pedra_ai_batch_manager_register()
   if (empty($conf['pedra_ai_api_key'])) {
     return;
   }
+
+  // Expose whether the processing server is configured so templates can show/hide video UI
+  $server_ready = !empty($conf['pedra_ai_server_url']) && !empty($conf['pedra_ai_server_token']);
+  $template->assign('PEDRA_SERVER_CONFIGURED', $server_ready);
 
   $template->append('element_set_global_plugins_actions', [
     'ID'      => 'pedra_ai',

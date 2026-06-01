@@ -3,6 +3,46 @@
 defined('PHPWG_ROOT_PATH') or die('Hacking attempt!');
 
 /**
+ * Ensure the jobs table has all columns introduced after v1.0.
+ * Safe to call multiple times — each ALTER is guarded by SHOW COLUMNS.
+ */
+function pedra_ai_migrate_jobs_table(): void
+{
+  $cols_to_add = [
+    'new_image_id'  => 'INT(11) DEFAULT NULL AFTER `result_url`',
+    'job_id'        => 'VARCHAR(80) DEFAULT NULL AFTER `id`',
+    'server_job_id' => 'VARCHAR(80) DEFAULT NULL AFTER `job_id`',
+  ];
+  foreach ($cols_to_add as $col => $definition) {
+    $check = pwg_query("SHOW COLUMNS FROM `" . PEDRA_AI_JOBS_TABLE . "` LIKE '" . $col . "'");
+    if (pwg_db_num_rows($check) === 0) {
+      pwg_query("ALTER TABLE `" . PEDRA_AI_JOBS_TABLE . "` ADD COLUMN `" . $col . "` " . $definition);
+    }
+  }
+}
+
+/**
+ * Generate a time-limited HMAC-signed URL so the processing server can
+ * download a Piwigo image/video without needing a session cookie.
+ *
+ * @param int $image_id  Piwigo image ID
+ * @param int $ttl       Validity in seconds (default 1 hour)
+ * @return string        Absolute URL to plugins/pedra_ai/serve.php
+ */
+function pedra_ai_signed_url(int $image_id, int $ttl = 3600): string
+{
+  global $conf;
+  $expires = time() + $ttl;
+  $secret  = $conf['pedra_ai_server_token'] ?? '';
+  $token   = hash_hmac('sha256', $image_id . ':' . $expires, $secret);
+  return get_absolute_root_url()
+       . 'plugins/pedra_ai/serve.php'
+       . '?image_id=' . $image_id
+       . '&expires='  . $expires
+       . '&token='    . urlencode($token);
+}
+
+/**
  * Convert a Piwigo image to a base64 data URI for the Pedra AI API.
  * Base64 is used instead of a public URL so that private/protected albums
  * work correctly — Pedra fetches nothing; the image data is in the request body.
@@ -144,11 +184,15 @@ function pedra_ai_save_as_new_image(int $source_image_id, string $tmp_path, stri
 
   $result_mime = mime_content_type($tmp_path) ?: 'image/jpeg';
   $mime_to_ext = [
-    'image/jpeg' => 'jpg',
-    'image/png'  => 'png',
-    'image/webp' => 'webp',
-    'image/gif'  => 'gif',
-    'image/avif' => 'avif',
+    'image/jpeg'  => 'jpg',
+    'image/png'   => 'png',
+    'image/webp'  => 'webp',
+    'image/gif'   => 'gif',
+    'image/avif'  => 'avif',
+    'video/mp4'   => 'mp4',
+    'video/webm'  => 'webm',
+    'video/ogg'   => 'ogv',
+    'video/quicktime' => 'mov',
   ];
   $result_ext   = $mime_to_ext[$result_mime] ?? $src_ext;
   $new_filename = $base . $suffix . '.' . $result_ext;
@@ -185,17 +229,41 @@ SELECT category_id
 /**
  * Log a Pedra AI job to the tracking table.
  * When status is 'done', auto-decrements the pedra_ai_credits counter if it is set.
+ *
+ * @param int         $image_id       Source Piwigo image ID
+ * @param string      $operation      Pedra operation name
+ * @param string      $status         pending|processing|done|error
+ * @param string|null $url            Result URL (Pedra CDN)
+ * @param string|null $error          Error message
+ * @param int|null    $new_image_id   New Piwigo image ID after saving
+ * @param string      $creativity     Creativity level (for credit cost calculation)
+ * @param string|null $job_id         External job ID sent to processing server
+ * @param string|null $server_job_id  Job ID returned by processing server
+ * @return int  Inserted row ID
  */
-function pedra_ai_log_job(int $image_id, string $operation, string $status, ?string $url, ?string $error, ?int $new_image_id = null, string $creativity = 'Medium'): void
-{
-  $url_sql          = $url          ? '"' . pwg_db_real_escape_string($url) . '"'                    : 'NULL';
-  $error_sql        = $error        ? '"' . pwg_db_real_escape_string(substr($error, 0, 500)) . '"'  : 'NULL';
-  $new_image_id_sql = $new_image_id ? (int) $new_image_id                                            : 'NULL';
+function pedra_ai_log_job(
+  int $image_id,
+  string $operation,
+  string $status,
+  ?string $url,
+  ?string $error,
+  ?int $new_image_id = null,
+  string $creativity = 'Medium',
+  ?string $job_id = null,
+  ?string $server_job_id = null
+): int {
+  $url_sql           = $url           ? '"' . pwg_db_real_escape_string($url) . '"'                    : 'NULL';
+  $error_sql         = $error         ? '"' . pwg_db_real_escape_string(substr($error, 0, 500)) . '"'  : 'NULL';
+  $new_image_id_sql  = $new_image_id  ? (int) $new_image_id                                            : 'NULL';
+  $job_id_sql        = $job_id        ? '"' . pwg_db_real_escape_string($job_id) . '"'                 : 'NULL';
+  $server_job_id_sql = $server_job_id ? '"' . pwg_db_real_escape_string($server_job_id) . '"'          : 'NULL';
 
   $query = '
 INSERT INTO ' . PEDRA_AI_JOBS_TABLE . '
-  (image_id, operation, status, result_url, new_image_id, error_msg, created_at)
+  (job_id, server_job_id, image_id, operation, status, result_url, new_image_id, error_msg, created_at)
   VALUES(
+    ' . $job_id_sql . ',
+    ' . $server_job_id_sql . ',
     ' . $image_id . ',
     "' . pwg_db_real_escape_string($operation) . '",
     "' . $status . '",
@@ -207,11 +275,14 @@ INSERT INTO ' . PEDRA_AI_JOBS_TABLE . '
 ;';
 
   pwg_query($query);
+  $inserted_id = (int) pwg_db_insert_id();
 
   // Auto-decrement credit counter on successful jobs (only if tracking is enabled)
   if ($status === 'done') {
     pedra_ai_decrement_credits($operation, $creativity);
   }
+
+  return $inserted_id;
 }
 
 /**
